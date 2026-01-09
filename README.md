@@ -1,10 +1,24 @@
-# PASeg
+# VISTA-PATH: An interactive foundation model for histopathology image segmentation
 
-## 1. conda environment install
+## 📖 Overview
+
+VISTA-PATH (Visual Interactive Segmentation and Tissue Analysis for Pathology) is an interactive foundation model for histopathology image segmentation that integrates visual context, textual class prompts, and expert-guided interaction. Pre-trained on over **1.4 million** samples, VISTA-PATH achieves strong segmentation generalization across organs and tissue types, supports efficient **human-in-the-loop** refinement, and enables **clinically interpretable analysis** through survival-associated morphological features.
+
+
+## Installation
+
+First clone the repo and cd into the repo
 
 ```
-conda create -n PathSeg python=3.12
-conda activate PathSeg
+git clone https://github.com/lilab-stanford/MUSK](https://github.com/zhihuanglab/VISTA-PATH.git
+cd VISTA-PATH
+```
+
+Create a new enviroment with anaconda.
+
+```
+conda create -n VISTA-PATH python=3.12
+conda activate VISTA-PATH
 
 conda install -c conda-forge scikit-image opencv pandas pillow numpy
 
@@ -23,7 +37,15 @@ conda install -c conda-forge opencv
 conda install -c conda-forge albumentations
 ```
 
-## 2. Inference
+## Model Download
+
+The VISTA-PATH model can be downloaded from
+
+```
+https://github.com/zhihuanglab/VISTA-PATH/tree/main/checkpoints
+```
+
+## Quick Start: Model Inference  
 
 put the checkpoint into the file ./checkpoints
 
@@ -65,3 +87,8 @@ python3 inference_bbx.py \
 `--mask_dir` provides bbx prompts
 
 `--json_file` provides class names
+
+
+## License
+
+This model and associated code are released under the CC-BY-NC-ND 4.0 license and may only be used for non-commercial, academic research purposes with proper attribution. Any commercial use, sale, or other monetization of the VISTA-PATH model and its derivatives, which include models trained on outputs from the VISTA-PATH model or datasets created from the VISTA-PATH model, is prohibited and requires prior approval.
