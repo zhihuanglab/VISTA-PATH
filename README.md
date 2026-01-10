@@ -84,7 +84,7 @@ python3 inference_bbx.py \
 
 ## 🌟 Acknowledgement
 
-The project was built on top of repositories such as [PLIP](https://github.com/PathologyFoundation/plip) and [SAM](https://github.com/PathologyFoundation/plip](https://github.com/facebookresearch/segment-anything). We thank the authors and developers for their contribution.
+The project was built on top of repositories such as [PLIP](https://github.com/PathologyFoundation/plip) and [SAM](https://github.com/facebookresearch/segment-anything). We thank the authors and developers for their contribution.
 
 
 ## 📖 Publication
