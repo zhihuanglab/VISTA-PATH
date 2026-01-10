@@ -84,12 +84,8 @@ python3 inference_bbx.py \
 
 ## 🌟 Acknowledgement
 
-The project was built on top of repository such as [PLIP](https://github.com/PathologyFoundation/plip). We thank the authors and developers for their contribution.
+The project was built on top of repositories such as [PLIP](https://github.com/PathologyFoundation/plip) and [SAM](https://github.com/PathologyFoundation/plip](https://github.com/facebookresearch/segment-anything). We thank the authors and developers for their contribution.
 
-
-## 📝 License
-
-This model and associated code are released under the CC-BY-NC-ND 4.0 license and may only be used for non-commercial, academic research purposes with proper attribution. Any commercial use, sale, or other monetization of the VISTA-PATH model and its derivatives, which include models trained on outputs from the VISTA-PATH model or datasets created from the VISTA-PATH model, is prohibited and requires prior approval.
 
 ## 📖 Publication
 
