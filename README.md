@@ -1,29 +1,45 @@
-# PASeg
+# VISTA-PATH: An interactive foundation model for histopathology image segmentation
 
-## 1. conda environment install
+## 🔥 Overview
+
+VISTA-PATH (Visual Interactive Segmentation and Tissue Analysis for Pathology) is an interactive foundation model for histopathology image segmentation that integrates visual context, textual class prompts, and expert-guided interaction. Pre-trained on over **1.4 million** samples, VISTA-PATH achieves strong segmentation generalization across organs and tissue types, supports efficient **human-in-the-loop** refinement, and enables **clinically interpretable analysis** through survival-associated morphological features.
+
+
+## 🚀 Installation
+
+First clone the repo (including the model checkpoint) and cd into the repo
 
 ```
-conda create -n PathSeg python=3.12
-conda activate PathSeg
+git lfs install
+git clone https://github.com/zhihuanglab/VISTA-PATH.git
+cd VISTA-PATH
+git lfs pull
+```
 
+Create a new enviroment with anaconda.
+
+```
+conda create -n VISTA-PATH python=3.12
+conda activate VISTA-PATH
 conda install -c conda-forge scikit-image opencv pandas pillow numpy
-
 conda install -c conda-forge openslide openslide-python
-
 conda install pytorch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0  pytorch-cuda=11.8 -c pytorch -c nvidia
-
 pip install transformers==4.46.1
-
 pip install pycocotools matplotlib scikit-learn
-
 pip install accelerate==0.26.0
-
 conda install -c conda-forge opencv
-
 conda install -c conda-forge albumentations
 ```
 
-## 2. Inference
+## 🧠 Model Download
+
+The VISTA-PATH model can be downloaded from
+
+```
+https://github.com/zhihuanglab/VISTA-PATH/tree/main/checkpoints/pytorch_model.bin
+```
+
+## 🔬 Quick Start: Model Inference  
 
 put the checkpoint into the file ./checkpoints
 
@@ -65,3 +81,12 @@ python3 inference_bbx.py \
 `--mask_dir` provides bbx prompts
 
 `--json_file` provides class names
+
+## 🌟 Acknowledgement
+
+The project was built on top of repositories such as [PLIP](https://github.com/PathologyFoundation/plip) and [SAM](https://github.com/facebookresearch/segment-anything). We thank the authors and developers for their contribution.
+
+
+## 📖 Publication
+
+
