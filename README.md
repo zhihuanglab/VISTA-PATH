@@ -1,4 +1,4 @@
-# VISTA-PATH: An interactive foundation model for histopathology image segmentation
+# VISTA-PATH: An interactive foundation model for pathology image segmentation and quantitative analysis in computational pathology
 
 ## 🔥 Overview
 
