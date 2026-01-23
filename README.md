@@ -13,7 +13,7 @@ Overview of VISTA-PATH model architecture
 
 ## 🎬 Demo Video
 
-[demo](https://github.com/zhihuanglab/VISTA-PATH/blob/main/figures/VISTA-PATH%20demo%20(integrated%20into%20TissueLab)%20%5ByB3e0ElkpFs%5D.mp4)
+https://github.com/user-attachments/assets/cbe69431-b380-4de5-aee9-026d00b6f0e1
 
 
 ## 🚀 Installation
