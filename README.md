@@ -14,6 +14,7 @@ Overview of VISTA-PATH model architecture
 
 ## 🎬 Demo Video
 
+VISTA-PATH supports **human-in-the-loop** refinement by propagating sparse, patch-level bounding-box annotation feedback into whole-slide, pixel-level segmentation.
 
 <a href="https://github.com/user-attachments/assets/cbe69431-b380-4de5-aee9-026d00b6f0e1">
   <img src="https://raw.githubusercontent.com/zhihuanglab/VISTA-PATH/main/figures/preview.gif" alt="Demo Preview" width="800">
