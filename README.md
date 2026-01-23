@@ -11,9 +11,14 @@ VISTA-PATH (Visual Interactive Segmentation and Tissue Analysis for Pathology) i
 Overview of VISTA-PATH model architecture
 
 
+
 ## 🎬 Demo Video
 
-[![Demo Preview](https://raw.githubusercontent.com/zhihuanglab/VISTA-PATH/main/figures/preview.gif)](https://github.com/user-attachments/assets/cbe69431-b380-4de5-aee9-026d00b6f0e1)
+
+<a href="https://github.com/user-attachments/assets/cbe69431-b380-4de5-aee9-026d00b6f0e1">
+  <img src="https://raw.githubusercontent.com/zhihuanglab/VISTA-PATH/main/figures/preview.gif" alt="Demo Preview" width="800">
+</a>
+
 
 
 
