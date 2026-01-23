@@ -13,7 +13,8 @@ Overview of VISTA-PATH model architecture
 
 ## 🎬 Demo Video
 
-https://github.com/user-attachments/assets/cbe69431-b380-4de5-aee9-026d00b6f0e1
+[![Demo Preview](https://github.com/zhihuanglab/VISTA-PATH/blob/main/figures/preview.gif)](https://github.com/user-attachments/assets/cbe69431-b380-4de5-aee9-026d00b6f0e1)
+
 
 
 ## 🚀 Installation
