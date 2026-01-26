@@ -1,6 +1,6 @@
 # VISTA-PATH: An interactive foundation model for pathology image segmentation and quantitative analysis in computational pathology
 
-📎 **Paper Link**: <https://arxiv.org/abs/2510.09848](https://www.arxiv.org/abs/2601.16451>
+📎 **Paper Link**: <https://www.arxiv.org/abs/2601.16451>
 
 ✍️ **Authors**: Peixian Liang, Songhao Li, Shunsuke Koga, Yutong Li, Zahra Alipour, Yucheng Tang, Daguang Xu, Zhi Huang
 
