@@ -1,5 +1,8 @@
 # VISTA-PATH: An interactive foundation model for pathology image segmentation and quantitative analysis in computational pathology
 
+📎 **Paper Link**: <https://arxiv.org/abs/2510.09848](https://www.arxiv.org/abs/2601.16451>
+✍️ **Authors**: Peixian Liang, Songhao Li, Shunsuke Koga, Yutong Li, Zahra Alipour, Yucheng Tang, Daguang Xu, Zhi Huang
+
 ## 🔥 Overview
 
 VISTA-PATH (Visual Interactive Segmentation and Tissue Analysis for Pathology) is an interactive foundation model for histopathology image segmentation that integrates visual context, textual class prompts, and expert-guided interaction. Pre-trained on over **1.6 million** samples, VISTA-PATH achieves strong segmentation generalization across organs and tissue types, supports efficient **human-in-the-loop** refinement, and enables **clinically interpretable analysis** through survival-associated morphological features.
@@ -104,5 +107,19 @@ The project was built on top of repositories such as [PLIP](https://github.com/P
 
 
 ## 📖 Publication
+
+```
+@misc{liang2026vistapath,
+  title        = {VISTA-PATH: An interactive foundation model for pathology image segmentation and quantitative analysis in computational pathology},
+  author       = {Liang, Peixian and Li, Songhao and Koga, Shunsuke and Li, Yutong and Alipour, Zahra and Tang, Yucheng and Xu, Daguang and Huang, Zhi},
+  year         = {2026},
+  eprint       = {2601.16451},
+  archivePrefix= {arXiv},
+  primaryClass = {cs.CV},
+  doi          = {10.48550/arXiv.2601.16451},
+}
+```
+
+
 
 
