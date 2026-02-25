@@ -16,7 +16,7 @@ Overview of VISTA-PATH model architecture
 
 ## 🎬 Demo Video
 
-VISTA-PATH supports **human-in-the-loop** refinement by propagating sparse, patch-level bounding-box annotation feedback into whole-slide, pixel-level segmentation. VISTA-PATH is integrated into [TissueLab](https://www.tissuelab.org/).
+VISTA-PATH supports **human-in-the-loop** refinement by propagating sparse, patch-level bounding-box annotation feedback into whole-slide, pixel-level segmentation. VISTA-PATH is integrated into [TissueLab](https://www.tissuelab.org/). A step-by-step tutorial demonstrating how to perform VISTA-PATH active learning–based segmentation within TissueLab is available [here](https://github.com/zhihuanglab/VISTA-PATH/blob/main/notebook/run_TissueLab_VISTA-PATH.ipynb).
 
 <a href="https://github.com/user-attachments/assets/401248f1-c57c-4bca-87d1-cea7d366002d">
   <img src="https://raw.githubusercontent.com/zhihuanglab/VISTA-PATH/main/figures/preview.gif" alt="Demo Preview" width="800">
