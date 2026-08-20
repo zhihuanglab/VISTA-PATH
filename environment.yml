@@ -1,27 +1,42 @@
-name: PathSeg
+# Environment VISTA-PATH inference was verified on (H200, CUDA 12.8).
+#
+#   conda env create -f environment.yml
+#   conda activate VISTA-PATH
+#
+# conda provides only the interpreter; every import the code makes is pinned
+# through pip, including the OpenSlide C library (openslide-bin), so the stack
+# resolves identically on any machine. If your driver predates CUDA 12.8, swap
+# the cu128 index URL and the torch/torchvision pins for the matching build
+# from https://pytorch.org.
+#
+# Note: `conda env create` has been observed to under-install this pip section.
+# After it finishes, verify with:
+#   python -c "import torch, openslide, transformers; print(torch.__version__)"
+# and if anything is missing, re-run the pip step directly:
+#   conda run -p <env> python -m pip install -r <(...)   # or see README
+name: VISTA-PATH
 channels:
   - conda-forge
-  - pytorch
-  - nvidia
-  - defaults
 dependencies:
   - python=3.12
-  - scikit-image
-  - opencv
-  - pandas
-  - pillow
-  - numpy
-  - openslide
-  - openslide-python
-  - pytorch=2.4.0
-  - torchvision=0.19.0
-  - torchaudio=2.4.0
-  - pytorch-cuda=11.8
-  - albumentations
   - pip
   - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu128
+      - torch==2.10.0+cu128
+      - torchvision==0.25.0+cu128
+      - numpy==2.4.3
       - transformers==4.46.1
-      - pycocotools
-      - matplotlib
-      - scikit-learn
+      - tokenizers==0.20.3
+      - huggingface-hub==0.36.2
       - accelerate==0.26.0
+      - safetensors==0.7.0
+      - openslide-python==1.4.6
+      - openslide-bin==4.0.1.2
+      - opencv-python-headless==4.13.0.90
+      - scikit-image==0.26.0
+      - scikit-learn==1.8.0
+      - matplotlib==3.10.8
+      - pillow==12.1.1
+      - scipy==1.17.1
+      - tqdm==4.67.3
+      - regex==2026.2.28

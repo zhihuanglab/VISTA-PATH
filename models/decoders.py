@@ -17,7 +17,7 @@ class TransformerDecoder(nn.Module):
         for layer in self.layers:
             queries = layer(queries, memory)
 
-        return queries  
+        return queries
 
 
 
@@ -45,9 +45,9 @@ class CustomDecoder(nn.Module):
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
             nn.Upsample(scale_factor=4, mode='bilinear', align_corners=False),  # 56x56 → 224x224
-
-            nn.Conv2d(32, num_classes, kernel_size=1)  # Final conv: per-pixel class scores
         )
+        self.final_conv = nn.Conv2d(32, num_classes, kernel_size=1)
 
     def forward(self, x):
-        return self.decoder(x)  # (B, num_classes, H, W)
+        x = self.decoder(x)
+        return self.final_conv(x.contiguous())  # contiguous() prevents DDP grad stride warning

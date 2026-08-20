@@ -1,125 +1,336 @@
-import torch
-import torch.nn as nn
-from transformers import CLIPProcessor, CLIPModel
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
-from segment_anything import sam_model_registry
-from segment_anything.modeling import PromptEncoder
 import random
 
-from .decoders import CustomDecoder
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from transformers import CLIPTextModelWithProjection, Mask2FormerModel, SamModel
+
+
+class CrossAttnBlock(nn.Module):
+    """Post-LN cross-attention with residual. Used to inject token-level
+    text + box conditioning into the Mask2Former queries.
+
+    Follows the DETR convention: query_pos (if given) is added to the
+    attention Q only, not to the residual path."""
+
+    def __init__(self, d_model, nhead=8, dropout=0.1):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(
+            embed_dim=d_model, num_heads=nhead,
+            dropout=dropout, batch_first=True,
+        )
+        self.norm = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, query, key_value, query_pos=None, key_padding_mask=None):
+        q = query if query_pos is None else query + query_pos
+        attn_out, _ = self.attn(
+            q, key_value, key_value,
+            key_padding_mask=key_padding_mask,
+        )
+        return self.norm(query + self.dropout(attn_out))
+
 
 class CustomSegmentationModel(nn.Module):
-    def __init__(self, base_model_name, d_model, nhead, num_layers, bbx_random, vision_tune = False):
-        super(CustomSegmentationModel, self).__init__()
-        self.base_model = CLIPModel.from_pretrained(base_model_name)
-        
-        # Unfreeze specific layers of PLIP for fine-tuning
+    """
+    Variant of models_v3_debug_segment_debug that fixes the conditioning
+    pooling bug.
 
-        if vision_tune:
-            for name, param in self.base_model.named_parameters():
-                if "vision_model" in name:
-                    param.requires_grad = True  # Unfreeze vision and text encoders
-                else:
-                    param.requires_grad = False
+    Changes vs base:
+      - Text uses the full token sequence (B, T, C) rather than the pooled
+        text_embeds. Preserves per-token semantics needed for zero-shot
+        class names.
+      - Box keeps the two SAM corner tokens as a (B, 2, C) sequence rather
+        than mean-pooling them. Averaging the Fourier-style positional
+        embeddings of the two corners destroys corner identity and the
+        box size/aspect signal — only an artifact of the center remained.
+      - Queries cross-attend to the concatenated [text; box] token
+        sequence before the Mask2Former transformer decoder, replacing
+        the broadcast-add of a single global cond vector.
 
-        else:
-            for name, param in self.base_model.named_parameters():
-                    param.requires_grad = False
-        
-        self.cross_attn_text = CrossAttentionLayer(d_model=d_model, nhead=nhead)
-        self.cross_attn_bbx = CrossAttentionLayer(d_model=d_model, nhead=nhead)
+    ``forward`` is kept as the single-shot (image, text, box) -> mask path.
+    It is composed from the ``encode_image`` / ``encode_text`` /
+    ``encode_box`` / ``decode`` pieces so that callers running many prompts
+    over the same image (e.g. multi-class whole-slide inference) can encode
+    the image once and only re-run the cheap prompt-conditioned decoder.
+    """
 
-        self.image_proj = self.base_model.visual_projection  # usually nn.Linear
-        self.text_proj = self.base_model.text_projection 
-        
-        # Define a transformer encoder layer
-        encoder_layer = TransformerEncoderLayer(d_model=d_model, nhead=nhead)
-        self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers=num_layers)
-        
-        # Define the segmentation decoder
-        self.decoder = CustomDecoder(input_channels=d_model)
-
-        # sam_model = sam_model_registry['vit_b'](checkpoint='/project/zhihuanglab/Peixian/Path_Seg/DL/MedSAM/work_dir/SAM/sam_vit_b_01ec64.pth')
-        # self.prompt_encoder = sam_model.prompt_encoder
-
-        self.prompt_encoder = PromptEncoder(
-            embed_dim=512,
-            image_embedding_size=(7, 7),
-            input_image_size=(224, 224),
-            mask_in_chans=16,
-        )
-        # freeze prompt encoder
-        for param in self.prompt_encoder.parameters():
-            param.requires_grad = False
-        
-
+    def __init__(self,
+                 base_model_name,
+                 d_model=None,
+                 nhead=8,
+                 num_layers=None,
+                 bbx_random=0.0,
+                 tune_mode='freeze',
+                 mask2former_name='facebook/mask2former-swin-small-ade-semantic',
+                 num_queries=20,
+                 image_size=512,
+                 sam_pretrained='facebook/sam-vit-base'):
+        super().__init__()
         self.bbx_random = bbx_random
 
-    def forward(self, pixel_values, input_ids, attention_mask, box):
+        # PLIP (CLIP) text encoder — used as a token-level conditioning
+        # signal. Image encoder is intentionally not loaded.
+        self.base_model = CLIPTextModelWithProjection.from_pretrained(base_model_name)
+        if tune_mode == 'freeze':
+            for param in self.base_model.parameters():
+                param.requires_grad = False
 
-        with torch.no_grad():
-            # box_torch = torch.as_tensor(box, dtype=torch.float32, device=image.device)
-            if len(box.shape) == 2:
-                box = box[:, None, :]  # (B, 1, 4)
-            
+        # Mask2Former: Swin encoder + pixel decoder + transformer decoder.
+        m2f = Mask2FormerModel.from_pretrained(mask2former_name)
+        self.m2f_encoder        = m2f.pixel_level_module.encoder
+        self.pixel_decoder      = m2f.pixel_level_module.decoder
+        self.transformer_module = m2f.transformer_module
+        m2f_hidden_dim          = self.transformer_module.queries_features.embedding_dim
+        del m2f
 
-            if random.random() < self.bbx_random:
-                box = None
+        # Project the CLIP text token sequence into the M2F hidden dim.
+        # CLIPTextModelWithProjection's last_hidden_state is in
+        # config.hidden_size (pre-projection text-transformer width).
+        text_hidden = self.base_model.config.hidden_size
+        self.text_proj = nn.Linear(text_hidden, m2f_hidden_dim)
 
-            sparse_embeddings, dense_embeddings = self.prompt_encoder(
-                points=None,
-                boxes=box,
-                masks=None,
+        # SAM bbox prompt encoder, frozen. We keep `prompt_encoder` only;
+        # the SAM vision encoder and mask decoder are discarded.
+        sam = SamModel.from_pretrained(sam_pretrained)
+        self.prompt_encoder = sam.prompt_encoder
+        self.prompt_encoder.input_image_size = image_size
+        del sam
+
+        for p in self.prompt_encoder.parameters():
+            p.requires_grad = False
+
+        # Per-corner-token projection: SAM hidden -> M2F hidden.
+        sam_hidden = self.prompt_encoder.hidden_size
+        self.box_proj = (
+            nn.Identity() if sam_hidden == m2f_hidden_dim
+            else nn.Linear(sam_hidden, m2f_hidden_dim)
+        )
+
+        # Two learnable no-box tokens. Mirrors the K=2 corner-token
+        # structure produced by SAM's prompt encoder so the cross-attn
+        # sees the same sequence length in both "has box" and "no box"
+        # branches. Small random init so absence is a distinguishable
+        # signal from the start (zero init collapses through MHA's
+        # W_k/W_v and leaves attention to the bias only).
+        self.no_box_embed = nn.Embedding(2, m2f_hidden_dim)
+        nn.init.normal_(self.no_box_embed.weight, std=0.02)
+
+        # Query <- [text_tokens ; box_tokens] cross-attention. Replaces
+        # the pooled-vector broadcast-add used by the base variant.
+        self.cond_attn = CrossAttnBlock(d_model=m2f_hidden_dim, nhead=nhead)
+
+        # Resize 100-query embeddings to num_queries by KEEPING the first
+        # `num_queries` rows of the pretrained embeddings.
+        self.num_queries = num_queries
+        old_emb  = self.transformer_module.queries_embedder
+        old_feat = self.transformer_module.queries_features
+        assert num_queries <= old_emb.num_embeddings, (
+            f"num_queries={num_queries} exceeds pretrained "
+            f"{old_emb.num_embeddings}; cannot slice."
+        )
+        self.transformer_module.queries_embedder = nn.Embedding.from_pretrained(
+            old_emb.weight[:num_queries].clone(), freeze=False,
+        )
+        self.transformer_module.queries_features = nn.Embedding.from_pretrained(
+            old_feat.weight[:num_queries].clone(), freeze=False,
+        )
+
+        # Per-query binary classification head: (bg, fg).
+        self.class_head = nn.Linear(m2f_hidden_dim, 2)
+
+    def _build_cond_tokens(self, text_tokens, text_pad_mask, box_tokens):
+        """Concat text + box token sequences and build a joint
+        key_padding_mask (True = ignore)."""
+        cond_tokens = torch.cat([text_tokens, box_tokens], dim=1)  # (B, T+K, C)
+        B, K, _ = box_tokens.shape
+        box_pad_mask = torch.zeros(
+            B, K, dtype=torch.bool, device=box_tokens.device,
+        )
+        pad_mask = torch.cat([text_pad_mask, box_pad_mask], dim=1)
+        return cond_tokens, pad_mask
+
+    # ------------------------------------------------------------------
+    # Image path (prompt-independent). Everything below `encode_image` is
+    # a pure function of the pixels, so it is computed once per window and
+    # reused for every class prompt run on that window.
+    # ------------------------------------------------------------------
+
+    def encode_image(self, pixel_values_m2f):
+        """Swin encoder + pixel decoder + the per-level projections the
+        transformer module would otherwise redo on every forward.
+
+        Returns a dict that ``decode`` consumes. Nothing in it depends on
+        the text or box prompt.
+        """
+        # Mask2Former path: native resolution, ImageNet normalization.
+        encoder_out   = self.m2f_encoder(pixel_values_m2f)
+        swin_features = list(encoder_out.feature_maps)
+
+        pixel_dec_out        = self.pixel_decoder(swin_features)
+        mask_features        = pixel_dec_out.mask_features
+        multi_scale_features = list(pixel_dec_out.multi_scale_features)
+
+        tm = self.transformer_module
+        multi_stage_features, multi_stage_pos_embeds, size_list = [], [], []
+        for i in range(tm.num_feature_levels):
+            size_list.append(multi_scale_features[i].shape[-2:])
+            multi_stage_pos_embeds.append(
+                tm.position_embedder(multi_scale_features[i], None).flatten(2)
             )
+            multi_stage_features.append(
+                tm.input_projections[i](multi_scale_features[i]).flatten(2)
+                + tm.level_embed.weight[i][None, :, None]
+            )
+            multi_stage_pos_embeds[-1] = multi_stage_pos_embeds[-1].permute(2, 0, 1)
+            multi_stage_features[-1]  = multi_stage_features[-1].permute(2, 0, 1)
 
-        outputs = self.base_model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask)
+        return {
+            "mask_features": mask_features,
+            "multi_stage_features": multi_stage_features,
+            "multi_stage_pos_embeds": multi_stage_pos_embeds,
+            "size_list": size_list,
+            "spatial_size": pixel_values_m2f.shape[-2:],
+            "batch_size": pixel_values_m2f.shape[0],
+        }
 
-        # Extract vision transformer tokens: (B, 50, 512)
-        image_tokens = outputs.vision_model_output.last_hidden_state[:, 1:, :]  # drop CLS token -> (B, 49, 512)
+    # ------------------------------------------------------------------
+    # Prompt path (image-independent).
+    # ------------------------------------------------------------------
 
-        # print(f"image_tokens: {image_tokens.shape}")
-        image_proj = self.image_proj(image_tokens)  # (B, 49, d_model)
-        # print(f"image_proj: {image_proj.shape}")
+    def encode_text(self, input_ids, attention_mask):
+        """Tokenized prompt -> (text tokens in M2F hidden dim, pad mask).
 
-        # Project text and global-average pool for fusion
-        text_tokens = outputs.text_model_output.last_hidden_state  # (B, T, 512)
-        text_proj = self.text_proj(text_tokens)  # (B, T, d_model)
+        Depends only on the prompt, so multi-class inference can call this
+        once per class name and reuse the result for every window.
+        """
+        text_out    = self.base_model(input_ids=input_ids, attention_mask=attention_mask)
+        text_seq    = text_out.last_hidden_state          # (B, T, text_hidden)
+        text_tokens = self.text_proj(text_seq)            # (B, T, C)
+        text_pad_mask = (attention_mask == 0)             # True = pad
+        return text_tokens, text_pad_mask
 
-        # print(f"text_tokens: {text_tokens.shape}")
-        # print(f"text_proj: {text_proj.shape}")
+    def encode_box(self, box, batch_size, device=None, dtype=None):
+        """Box prompt -> (B, 2, C) token sequence.
 
-        # Cross-attention: let each image patch attend to the text
-        fused_tokens = self.cross_attn_text(query=image_proj, key=text_proj, value=text_proj)  # (B, 49, d_model)
+        ``box`` may be (B, 4) or (B, num_boxes, 4); None (or a bbx_random
+        draw) selects the learnable no-box tokens instead.
+        """
+        return self._encode_box(box, batch_size, device, dtype)[0]
 
-        fused_tokens = self.cross_attn_bbx(query=fused_tokens, key=sparse_embeddings, value=sparse_embeddings)  # (B, 49, d_model)
+    def _encode_box(self, box, batch_size, device=None, dtype=None):
+        """``encode_box`` plus the effective box actually used (None when
+        the bbx_random draw dropped it), which ``forward`` returns."""
+        if box is not None and box.dim() == 2:
+            box = box[:, None, :]                         # (B, 4) -> (B, 1, 4)
+        if random.random() < self.bbx_random:
+            box = None
 
-    
+        if box is not None:
+            with torch.no_grad():
+                sparse_emb, _ = self.prompt_encoder(
+                    input_points=None,
+                    input_labels=None,
+                    input_boxes=box,
+                    input_masks=None,
+                )
+            # (B, num_boxes, 2, sam_hidden) -> (B, num_boxes*2, sam_hidden)
+            # Typical call site uses num_boxes=1, so K=2.
+            sparse_emb = sparse_emb.flatten(1, 2)
+            return self.box_proj(sparse_emb), box         # (B, 2*num_boxes, C)
 
-        # Transformer encoder (optional post-fusion modeling)
-        fused_tokens = self.transformer_encoder(fused_tokens)  # (B, 49, d_model)
+        # Two learnable no-box tokens, broadcast over batch. K=2,
+        # matches the single-box (num_boxes=1) case above; if you
+        # pass num_boxes>1, the two branches have different K.
+        tokens = self.no_box_embed.weight.unsqueeze(0).expand(batch_size, -1, -1)
+        if device is not None:
+            tokens = tokens.to(device)
+        if dtype is not None:
+            tokens = tokens.to(dtype)
+        return tokens, box
 
-        B, N, D = fused_tokens.shape
-        h = w = int(N ** 0.5)
-        fused_feat = fused_tokens.permute(0, 2, 1).reshape(B, D, h, w)  # (B, d_model, 7, 7)
+    # ------------------------------------------------------------------
+    # Conditioned decoder.
+    # ------------------------------------------------------------------
 
+    def _run_transformer_with_cond(self, image_features, cond_tokens, cond_pad_mask):
+        """Replica of HF Mask2FormerTransformerModule.forward, but with a
+        cross-attention from queries to (text + box) token sequence
+        applied before the masked-attention decoder. The per-level
+        projections were hoisted into ``encode_image``."""
+        tm = self.transformer_module
 
-        # Segmentation output
-        segmentation_output = self.decoder(fused_feat)  # (B, num_classes, H, W)
+        multi_stage_features   = image_features["multi_stage_features"]
+        multi_stage_pos_embeds = image_features["multi_stage_pos_embeds"]
+        size_list              = image_features["size_list"]
 
-        if box is not None and box.shape[1] == 1:
-            box = box[:, 0, :]  # (B, 4)
+        _, batch_size, _ = multi_stage_features[0].shape
+
+        # (Q, B, C)
+        query_pos  = tm.queries_embedder.weight.unsqueeze(1).repeat(1, batch_size, 1)
+        query_feat = tm.queries_features.weight.unsqueeze(1).repeat(1, batch_size, 1)
+
+        # Cross-attn over the cond token sequence. Switch to batch-first
+        # for the attention call, then back to (Q, B, C). query_pos is
+        # added to the attention Q only (DETR-style), not to the residual.
+        q_bqc   = query_feat.permute(1, 0, 2)
+        qpos_bqc = query_pos.permute(1, 0, 2)
+        q_bqc = self.cond_attn(
+            q_bqc, cond_tokens,
+            query_pos=qpos_bqc,
+            key_padding_mask=cond_pad_mask,
+        )
+        query_feat = q_bqc.permute(1, 0, 2)
+
+        return tm.decoder(
+            inputs_embeds=query_feat,
+            multi_stage_positional_embeddings=multi_stage_pos_embeds,
+            pixel_embeddings=image_features["mask_features"],
+            encoder_hidden_states=multi_stage_features,
+            query_position_embeddings=query_pos,
+            feature_size_list=size_list,
+            output_hidden_states=False,
+            output_attentions=False,
+            return_dict=True,
+        )
+
+    def decode(self, image_features, text_tokens, text_pad_mask, box_tokens,
+               out_size=None):
+        """Run the conditioned transformer decoder + heads on cached image
+        features and return the (B, 2, H, W) segmentation map."""
+        cond_tokens, cond_pad_mask = self._build_cond_tokens(
+            text_tokens, text_pad_mask, box_tokens,
+        )
+
+        tm_out       = self._run_transformer_with_cond(
+            image_features, cond_tokens, cond_pad_mask,
+        )
+        query_feats  = tm_out.last_hidden_state           # (B, Q, hidden)
+        masks_logits = tm_out.masks_queries_logits[-1]    # (B, Q, h, w)
+
+        class_logits = self.class_head(query_feats)       # (B, Q, 2)
+
+        class_probs  = F.softmax(class_logits, dim=-1)    # softmax over classes per query
+        mask_probs   = masks_logits.sigmoid()             # bounded [0, 1]
+
+        seg_logits = torch.einsum("bqc,bqhw->bchw", class_probs, mask_probs)
+
+        return F.interpolate(
+            seg_logits,
+            size=image_features["spatial_size"] if out_size is None else out_size,
+            mode='bilinear',
+            align_corners=False,
+        )
+
+    def forward(self, pixel_values_m2f, input_ids, attention_mask, box=None):
+        text_tokens, text_pad_mask = self.encode_text(input_ids, attention_mask)
+
+        box_tokens, box = self._encode_box(box, pixel_values_m2f.shape[0])
+
+        image_features = self.encode_image(pixel_values_m2f)
+
+        segmentation_output = self.decode(
+            image_features, text_tokens, text_pad_mask, box_tokens,
+        )
 
         return segmentation_output, box
-
-
-class CrossAttentionLayer(nn.Module):
-    def __init__(self, d_model, nhead=8):
-        super().__init__()
-        self.cross_attn = nn.MultiheadAttention(embed_dim=d_model, num_heads=nhead, batch_first=True)
-        self.norm = nn.LayerNorm(d_model)
-        self.dropout = nn.Dropout(0.1)
-
-    def forward(self, query, key, value):
-        attn_output, _ = self.cross_attn(query=query, key=key, value=value)
-        output = self.norm(query + self.dropout(attn_output))  # Add & Norm
-        return output
