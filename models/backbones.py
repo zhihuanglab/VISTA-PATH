@@ -47,12 +47,6 @@ class CustomSegmentationModel(nn.Module):
       - Queries cross-attend to the concatenated [text; box] token
         sequence before the Mask2Former transformer decoder, replacing
         the broadcast-add of a single global cond vector.
-
-    ``forward`` is kept as the single-shot (image, text, box) -> mask path.
-    It is composed from the ``encode_image`` / ``encode_text`` /
-    ``encode_box`` / ``decode`` pieces so that callers running many prompts
-    over the same image (e.g. multi-class whole-slide inference) can encode
-    the image once and only re-run the cheap prompt-conditioned decoder.
     """
 
     def __init__(self,
@@ -150,28 +144,13 @@ class CustomSegmentationModel(nn.Module):
         pad_mask = torch.cat([text_pad_mask, box_pad_mask], dim=1)
         return cond_tokens, pad_mask
 
-    # ------------------------------------------------------------------
-    # Image path (prompt-independent). Everything below `encode_image` is
-    # a pure function of the pixels, so it is computed once per window and
-    # reused for every class prompt run on that window.
-    # ------------------------------------------------------------------
-
-    def encode_image(self, pixel_values_m2f):
-        """Swin encoder + pixel decoder + the per-level projections the
-        transformer module would otherwise redo on every forward.
-
-        Returns a dict that ``decode`` consumes. Nothing in it depends on
-        the text or box prompt.
-        """
-        # Mask2Former path: native resolution, ImageNet normalization.
-        encoder_out   = self.m2f_encoder(pixel_values_m2f)
-        swin_features = list(encoder_out.feature_maps)
-
-        pixel_dec_out        = self.pixel_decoder(swin_features)
-        mask_features        = pixel_dec_out.mask_features
-        multi_scale_features = list(pixel_dec_out.multi_scale_features)
-
+    def _run_transformer_with_cond(self, multi_scale_features, mask_features,
+                                   cond_tokens, cond_pad_mask):
+        """Replica of HF Mask2FormerTransformerModule.forward, but with a
+        cross-attention from queries to (text + box) token sequence
+        applied before the masked-attention decoder."""
         tm = self.transformer_module
+
         multi_stage_features, multi_stage_pos_embeds, size_list = [], [], []
         for i in range(tm.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
@@ -184,85 +163,6 @@ class CustomSegmentationModel(nn.Module):
             )
             multi_stage_pos_embeds[-1] = multi_stage_pos_embeds[-1].permute(2, 0, 1)
             multi_stage_features[-1]  = multi_stage_features[-1].permute(2, 0, 1)
-
-        return {
-            "mask_features": mask_features,
-            "multi_stage_features": multi_stage_features,
-            "multi_stage_pos_embeds": multi_stage_pos_embeds,
-            "size_list": size_list,
-            "spatial_size": pixel_values_m2f.shape[-2:],
-            "batch_size": pixel_values_m2f.shape[0],
-        }
-
-    # ------------------------------------------------------------------
-    # Prompt path (image-independent).
-    # ------------------------------------------------------------------
-
-    def encode_text(self, input_ids, attention_mask):
-        """Tokenized prompt -> (text tokens in M2F hidden dim, pad mask).
-
-        Depends only on the prompt, so multi-class inference can call this
-        once per class name and reuse the result for every window.
-        """
-        text_out    = self.base_model(input_ids=input_ids, attention_mask=attention_mask)
-        text_seq    = text_out.last_hidden_state          # (B, T, text_hidden)
-        text_tokens = self.text_proj(text_seq)            # (B, T, C)
-        text_pad_mask = (attention_mask == 0)             # True = pad
-        return text_tokens, text_pad_mask
-
-    def encode_box(self, box, batch_size, device=None, dtype=None):
-        """Box prompt -> (B, 2, C) token sequence.
-
-        ``box`` may be (B, 4) or (B, num_boxes, 4); None (or a bbx_random
-        draw) selects the learnable no-box tokens instead.
-        """
-        return self._encode_box(box, batch_size, device, dtype)[0]
-
-    def _encode_box(self, box, batch_size, device=None, dtype=None):
-        """``encode_box`` plus the effective box actually used (None when
-        the bbx_random draw dropped it), which ``forward`` returns."""
-        if box is not None and box.dim() == 2:
-            box = box[:, None, :]                         # (B, 4) -> (B, 1, 4)
-        if random.random() < self.bbx_random:
-            box = None
-
-        if box is not None:
-            with torch.no_grad():
-                sparse_emb, _ = self.prompt_encoder(
-                    input_points=None,
-                    input_labels=None,
-                    input_boxes=box,
-                    input_masks=None,
-                )
-            # (B, num_boxes, 2, sam_hidden) -> (B, num_boxes*2, sam_hidden)
-            # Typical call site uses num_boxes=1, so K=2.
-            sparse_emb = sparse_emb.flatten(1, 2)
-            return self.box_proj(sparse_emb), box         # (B, 2*num_boxes, C)
-
-        # Two learnable no-box tokens, broadcast over batch. K=2,
-        # matches the single-box (num_boxes=1) case above; if you
-        # pass num_boxes>1, the two branches have different K.
-        tokens = self.no_box_embed.weight.unsqueeze(0).expand(batch_size, -1, -1)
-        if device is not None:
-            tokens = tokens.to(device)
-        if dtype is not None:
-            tokens = tokens.to(dtype)
-        return tokens, box
-
-    # ------------------------------------------------------------------
-    # Conditioned decoder.
-    # ------------------------------------------------------------------
-
-    def _run_transformer_with_cond(self, image_features, cond_tokens, cond_pad_mask):
-        """Replica of HF Mask2FormerTransformerModule.forward, but with a
-        cross-attention from queries to (text + box) token sequence
-        applied before the masked-attention decoder. The per-level
-        projections were hoisted into ``encode_image``."""
-        tm = self.transformer_module
-
-        multi_stage_features   = image_features["multi_stage_features"]
-        multi_stage_pos_embeds = image_features["multi_stage_pos_embeds"]
-        size_list              = image_features["size_list"]
 
         _, batch_size, _ = multi_stage_features[0].shape
 
@@ -285,7 +185,7 @@ class CustomSegmentationModel(nn.Module):
         return tm.decoder(
             inputs_embeds=query_feat,
             multi_stage_positional_embeddings=multi_stage_pos_embeds,
-            pixel_embeddings=image_features["mask_features"],
+            pixel_embeddings=mask_features,
             encoder_hidden_states=multi_stage_features,
             query_position_embeddings=query_pos,
             feature_size_list=size_list,
@@ -294,16 +194,53 @@ class CustomSegmentationModel(nn.Module):
             return_dict=True,
         )
 
-    def decode(self, image_features, text_tokens, text_pad_mask, box_tokens,
-               out_size=None):
-        """Run the conditioned transformer decoder + heads on cached image
-        features and return the (B, 2, H, W) segmentation map."""
+    def forward(self, pixel_values_m2f, input_ids, attention_mask, box=None):
+        # Full text token sequence (no pooling).
+        text_out    = self.base_model(input_ids=input_ids, attention_mask=attention_mask)
+        text_seq    = text_out.last_hidden_state          # (B, T, text_hidden)
+        text_tokens = self.text_proj(text_seq)            # (B, T, C)
+        text_pad_mask = (attention_mask == 0)             # True = pad
+
+        # Optional bbox conditioning. SAM corner tokens kept as a sequence.
+        if box is not None and box.dim() == 2:
+            box = box[:, None, :]                         # (B, 4) -> (B, 1, 4)
+        if random.random() < self.bbx_random:
+            box = None
+
+        B = pixel_values_m2f.shape[0]
+        if box is not None:
+            with torch.no_grad():
+                sparse_emb, _ = self.prompt_encoder(
+                    input_points=None,
+                    input_labels=None,
+                    input_boxes=box,
+                    input_masks=None,
+                )
+            # (B, num_boxes, 2, sam_hidden) -> (B, num_boxes*2, sam_hidden)
+            # Typical call site uses num_boxes=1, so K=2.
+            sparse_emb = sparse_emb.flatten(1, 2)
+            box_tokens = self.box_proj(sparse_emb)        # (B, 2*num_boxes, C)
+        else:
+            # Two learnable no-box tokens, broadcast over batch. K=2,
+            # matches the single-box (num_boxes=1) case above; if you
+            # pass num_boxes>1, the two branches have different K.
+            box_tokens = self.no_box_embed.weight.unsqueeze(0).expand(B, -1, -1)  # (B, 2, C)
+
         cond_tokens, cond_pad_mask = self._build_cond_tokens(
             text_tokens, text_pad_mask, box_tokens,
         )
 
+        # Mask2Former path: native resolution, ImageNet normalization.
+        encoder_out   = self.m2f_encoder(pixel_values_m2f)
+        swin_features = list(encoder_out.feature_maps)
+
+        pixel_dec_out        = self.pixel_decoder(swin_features)
+        mask_features        = pixel_dec_out.mask_features
+        multi_scale_features = list(pixel_dec_out.multi_scale_features)
+
+        # Conditioned transformer decoder.
         tm_out       = self._run_transformer_with_cond(
-            image_features, cond_tokens, cond_pad_mask,
+            multi_scale_features, mask_features, cond_tokens, cond_pad_mask,
         )
         query_feats  = tm_out.last_hidden_state           # (B, Q, hidden)
         masks_logits = tm_out.masks_queries_logits[-1]    # (B, Q, h, w)
@@ -315,22 +252,11 @@ class CustomSegmentationModel(nn.Module):
 
         seg_logits = torch.einsum("bqc,bqhw->bchw", class_probs, mask_probs)
 
-        return F.interpolate(
+        segmentation_output = F.interpolate(
             seg_logits,
-            size=image_features["spatial_size"] if out_size is None else out_size,
+            size=pixel_values_m2f.shape[-2:],
             mode='bilinear',
             align_corners=False,
-        )
-
-    def forward(self, pixel_values_m2f, input_ids, attention_mask, box=None):
-        text_tokens, text_pad_mask = self.encode_text(input_ids, attention_mask)
-
-        box_tokens, box = self._encode_box(box, pixel_values_m2f.shape[0])
-
-        image_features = self.encode_image(pixel_values_m2f)
-
-        segmentation_output = self.decode(
-            image_features, text_tokens, text_pad_mask, box_tokens,
         )
 
         return segmentation_output, box

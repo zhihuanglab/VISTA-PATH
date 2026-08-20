@@ -6,11 +6,8 @@ the same sliding-window machinery; only the prompt source and the output
 post-processing differ.
 """
 
-import contextlib
-import os
 import random
 
-import cv2
 import numpy as np
 import torch
 
@@ -36,53 +33,6 @@ def set_seed(seed=42):
 
     torch.backends.cudnn.deterministic = True   # Ensure deterministic behavior
     torch.backends.cudnn.benchmark = False
-
-
-def tune_for_inference(precision="tf32", cpu_threads=8):
-    """Flip the global knobs that only make sense for a forward-only run.
-
-    ``set_seed`` pins cuDNN into deterministic / no-autotune mode, which is
-    the right default for training but costs ~35% of the forward throughput.
-    Inference re-runs one fixed input shape thousands of times, so autotuning
-    pays for itself on the first batch.
-
-    ``cpu_threads`` caps OpenCV and the intra-op torch pool. On a fat node
-    (256 cores here) OpenCV otherwise spawns a thread per core inside every
-    DataLoader worker, and the resulting oversubscription burns far more CPU
-    than the resize it is parallelising.
-
-    Returns the autocast context manager to wrap the forward pass in.
-    """
-    torch.backends.cudnn.deterministic = False
-    torch.backends.cudnn.benchmark = True
-
-    # TF32 keeps fp32 storage but runs the matmuls/convs on the tensor cores.
-    allow_tf32 = precision in ("tf32", "bf16", "fp16")
-    torch.backends.cuda.matmul.allow_tf32 = allow_tf32
-    torch.backends.cudnn.allow_tf32 = allow_tf32
-
-    limit_cpu_threads(cpu_threads)
-
-    if precision == "bf16":
-        return torch.autocast("cuda", dtype=torch.bfloat16)
-    if precision == "fp16":
-        return torch.autocast("cuda", dtype=torch.float16)
-    return contextlib.nullcontext()
-
-
-def limit_cpu_threads(n=1):
-    """Cap the thread pools that would otherwise size themselves to the whole
-    machine. Called in the parent and again in every DataLoader worker."""
-    n = max(1, int(n))
-    cv2.setNumThreads(n)
-    torch.set_num_threads(n)
-    for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
-        os.environ.setdefault(var, str(n))
-
-
-def worker_init(_worker_id):
-    """DataLoader worker initializer: one OpenCV thread per worker."""
-    limit_cpu_threads(1)
 
 
 class SegWrapper(torch.nn.Module):
@@ -176,51 +126,6 @@ def encode_class_texts(processor, idx_to_class, class_indices):
                         padding="max_length", truncation=True, max_length=77)
         text_cache[c] = (enc["input_ids"].squeeze(0), enc["attention_mask"].squeeze(0))
     return text_cache
-
-
-@torch.no_grad()
-def encode_class_prompts(core_model, processor, idx_to_class, class_indices, device):
-    """Run the PLIP text tower once per class name and keep the projected
-    token sequence on the GPU.
-
-    The text branch depends only on the class name, so a whole-slide run that
-    re-tokenizes and re-encodes the same handful of prompts for every batch is
-    doing the same work thousands of times. Each entry is a
-    ``(1, 77, C)`` token tensor plus its pad mask, ready to be expanded to the
-    batch size.
-    """
-    token_cache = encode_class_texts(processor, idx_to_class, class_indices)
-    prompt_cache = {}
-    for c in class_indices:
-        input_ids, attention_mask = token_cache[c]
-        tokens, pad_mask = core_model.encode_text(
-            input_ids[None].to(device), attention_mask[None].to(device),
-        )
-        prompt_cache[c] = (tokens, pad_mask)
-    return prompt_cache
-
-
-# OpenCV keeps 16-bit signed coordinates internally in several resize paths,
-# so anything past SHRT_MAX in either axis takes the numpy route.
-_CV_DIM_LIMIT = 32767
-
-
-def nearest_upsample(src, out_h, out_w):
-    """Nearest-neighbour resample of ``src`` onto an ``out_h x out_w`` grid.
-
-    ``cv2.resize`` is ~3x faster than fancy indexing and avoids materializing
-    the intermediate row gather, but it caps out on very large destinations —
-    a level-0 whole-slide mask can exceed OpenCV's coordinate range — so the
-    index form is kept as the fallback.
-    """
-    h, w = src.shape[:2]
-    if (h, w) == (out_h, out_w):
-        return src
-    if max(out_h, out_w, h, w) < _CV_DIM_LIMIT:
-        return cv2.resize(src, (out_w, out_h), interpolation=cv2.INTER_NEAREST)
-    yi = np.minimum((np.arange(out_h) * (h / out_h)).astype(np.int64), h - 1)
-    xi = np.minimum((np.arange(out_w) * (w / out_w)).astype(np.int64), w - 1)
-    return src[yi][:, xi]
 
 
 def get_patch_positions(H, W, patch_size=1024, overlap=128):
