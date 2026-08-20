@@ -13,8 +13,8 @@ dataset_name=TCGA-COAD
 python3 inference.py \
   --infer_vis_dir ./results/${dataset_name} \
   --checkpoint_file ./checkpoints/pytorch_model.bin \
-  --image_file /data/TCGA-COAD/20x_images/TCGA-AZ-6608-01Z-00-DX1.40d9f93f-f7d8-4138-9af1-bb579c53194b.tif \
+  --image_file ./examples/TCGA-COAD/TCGA-AD-6895-01Z-00-DX1.7FB1FBC6-683B-4285-89D1-A7A20F07A9D4.svs \
   --class_names "Tumor" "Stroma" \
-  --crop_size 1024 \
-  --overlap 128 \
+  --crop_size 2048 \
+  --overlap 256 \
   --bbx_random 1
