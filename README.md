@@ -2,6 +2,8 @@
 
 📎 **Paper Link**: <https://www.arxiv.org/abs/2601.16451>
 
+🤗 **Model**: <https://huggingface.co/zhihuanglab/VISTA-PATH>
+
 ## 🔥 Overview
 
 VISTA-PATH (Visual Interactive Segmentation and Tissue Analysis for Pathology) is an interactive foundation model for histopathology image segmentation that integrates visual context, textual class prompts, and expert-guided interaction. Pre-trained on over **1.6 million** samples, VISTA-PATH achieves strong segmentation generalization across organs and tissue types, supports efficient **human-in-the-loop** refinement, and enables **clinically interpretable analysis** through survival-associated morphological features.
@@ -71,7 +73,14 @@ PLIP, Mask2Former and SAM are pulled from the HuggingFace Hub on first run.
 
 ## 🧠 Model Download
 
-The VISTA-PATH model can be downloaded from
+The VISTA-PATH model can be downloaded from the Hugging Face Hub
+
+```python
+from huggingface_hub import snapshot_download
+snapshot_download("zhihuanglab/VISTA-PATH", local_dir="./checkpoints")
+```
+
+or straight from this repository (the checkpoint is tracked with Git LFS)
 
 ```
 https://github.com/zhihuanglab/VISTA-PATH/tree/main/checkpoints/pytorch_model.bin
