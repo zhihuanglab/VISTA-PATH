@@ -1,13 +1,22 @@
-# Environment VISTA-PATH inference was verified on (H200, CUDA 12.8).
+# Environment VISTA-PATH inference was verified on (H200, cu118 build of torch).
 #
 #   conda env create -f environment.yml
 #   conda activate VISTA-PATH
 #
 # conda provides only the interpreter; every import the code makes is pinned
 # through pip, including the OpenSlide C library (openslide-bin), so the stack
-# resolves identically on any machine. If your driver predates CUDA 12.8, swap
-# the cu128 index URL and the torch/torchvision pins for the matching build
-# from https://pytorch.org.
+# resolves identically on any machine.
+#
+# The CUDA 11.8 build of torch is pinned deliberately: it carries kernels for
+# sm_50 through sm_90, i.e. everything from Tesla V100 up to H200, and its
+# runtime works on any driver from CUDA 11.8 onwards (newer drivers are
+# backward compatible). Blackwell cards (RTX 50 series, B200; sm_100/sm_120)
+# are the exception - they need a cu128 build instead:
+#
+#   pip install --extra-index-url https://download.pytorch.org/whl/cu128 \
+#       torch==2.10.0+cu128 torchvision==0.25.0+cu128
+#
+# Note that cu128 wheels drop Volta (sm_70), so they will not run on a V100.
 #
 # Note: `conda env create` has been observed to under-install this pip section.
 # After it finishes, verify with:
@@ -21,9 +30,9 @@ dependencies:
   - python=3.12
   - pip
   - pip:
-      - --extra-index-url https://download.pytorch.org/whl/cu128
-      - torch==2.10.0+cu128
-      - torchvision==0.25.0+cu128
+      - --extra-index-url https://download.pytorch.org/whl/cu118
+      - torch==2.4.0+cu118
+      - torchvision==0.19.0+cu118
       - numpy==2.4.3
       - transformers==4.46.1
       - tokenizers==0.20.3

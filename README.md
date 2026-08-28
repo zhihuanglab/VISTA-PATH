@@ -49,14 +49,34 @@ Or install the same stack by hand:
 conda create -n VISTA-PATH python=3.12
 conda activate VISTA-PATH
 
-pip install --extra-index-url https://download.pytorch.org/whl/cu128 \
-    torch==2.10.0+cu128 torchvision==0.25.0+cu128
+pip install --extra-index-url https://download.pytorch.org/whl/cu118 \
+    torch==2.4.0+cu118 torchvision==0.19.0+cu118
 pip install transformers==4.46.1 tokenizers==0.20.3 huggingface-hub==0.36.2 \
     accelerate==0.26.0 safetensors==0.7.0
 pip install openslide-python==1.4.6 openslide-bin==4.0.1.2 \
     opencv-python-headless==4.13.0.90 scikit-image==0.26.0 scikit-learn==1.8.0 \
     matplotlib==3.10.8 pillow==12.1.1 scipy==1.17.1 numpy==2.4.3
 ```
+
+### GPU compatibility
+
+The cu118 build of torch is pinned deliberately. It ships kernels for `sm_50`
+through `sm_90`, which covers every NVIDIA data-centre and workstation GPU from
+Tesla V100 up to H200, and its runtime works on any driver from CUDA 11.8
+onwards - newer drivers are backward compatible, so a CUDA 12.x host needs no
+adjustment.
+
+Blackwell cards (RTX 50 series, B200; `sm_100`/`sm_120`) are the one exception.
+They are not covered by cu118 and need a cu128 build instead:
+
+```
+pip install --extra-index-url https://download.pytorch.org/whl/cu128 \
+    torch==2.10.0+cu128 torchvision==0.25.0+cu128
+```
+
+Note that cu128 wheels drop Volta (`sm_70`), so that build will not run on a
+V100. Pick whichever of the two matches your hardware; the rest of the stack is
+identical.
 
 The OpenSlide C library comes from the `openslide-bin` wheel — the conda-forge
 build fails at import with a libtiff/libjpeg symbol mismatch. Verify the
