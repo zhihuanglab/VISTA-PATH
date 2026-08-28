@@ -43,7 +43,27 @@ conda env create -f environment.yml
 conda activate VISTA-PATH
 ```
 
-Or install the same stack by hand:
+Or, for a considerably faster install, use [uv](https://docs.astral.sh/uv/):
+
+```
+uv venv --python 3.12
+source .venv/bin/activate
+
+uv pip install --extra-index-url https://download.pytorch.org/whl/cu118 \
+    torch==2.4.0+cu118 torchvision==0.19.0+cu118
+uv pip install transformers==4.46.1 tokenizers==0.20.3 huggingface-hub==0.36.2 \
+    accelerate==0.26.0 safetensors==0.7.0
+uv pip install openslide-python==1.4.6 openslide-bin==4.0.1.2 \
+    opencv-python-headless==4.13.0.90 scikit-image==0.26.0 scikit-learn==1.8.0 \
+    matplotlib==3.10.8 pillow==12.1.1 scipy==1.17.1 numpy==2.4.3
+```
+
+The three commands are kept separate on purpose. uv resolves each package from
+the first index that offers it, so pinning everything in one command alongside
+`--extra-index-url` makes the resolution fail; splitting them keeps torch on the
+PyTorch index and the rest on PyPI without relaxing that safeguard.
+
+Or install the same stack by hand with conda and pip:
 
 ```
 conda create -n VISTA-PATH python=3.12
@@ -155,6 +175,27 @@ python3 inference_bbx.py \
 `--mask_dir` provides bbx prompts
 
 `--json_file` provides class names
+
+### Input data format
+
+No separate preprocessing step is required. `inference.py` takes a slide as it
+comes: Otsu tissue detection, sliding-window tiling and resizing to the model's
+input size all happen inside the script.
+
+`inference_bbx.py` works on extracted ROIs and needs its prompts in a specific
+form:
+
+| Input | Requirement |
+| --- | --- |
+| `--image_dir` | RGB images, one file per ROI (`.png`/`.jpg`). |
+| `--mask_dir` | One label mask per image, same height and width as the image, saved as `.png`. Pixel values are class indices, not colours. A single channel is expected; if an RGB mask is given, only its first channel is read. |
+| Pairing | The two directories are listed, sorted independently, and then zipped together by position. Give each mask the same filename as its image. A mismatch that preserves the count will not raise an error - it will silently pair the wrong mask with the wrong image. |
+| `--json_file` | A JSON object mapping each index in the mask to a class name, e.g. `{"1": "tumor", "2": "stroma"}`. Only classes present in a given window are prompted. Index `0` is always treated as unprompted background, whatever the mapping calls it, and defaults to `Background` if the mapping omits it. |
+
+The bundled `examples/BRCA` set follows exactly this convention: 1024x1024 RGB
+ROIs, `uint8` masks holding values 0-3, and `idx_to_names/BRCA.json` mapping
+those indices onto the BCSS class names, where index 0 is `outside_roi` and is
+not prompted.
 
 As above, only `.jpg` is written by default — one row per prompted class (image / predicted probability / ground truth) plus a merged row. Add `--save_mask` for the `.png` label mask and `--save_prob` for the `.npz` probability maps.
 
