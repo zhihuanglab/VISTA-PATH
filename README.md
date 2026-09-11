@@ -179,8 +179,7 @@ sharing the filename of the image they belong to - the same format
 
 The remaining datasets used in the paper are not redistributed here - download
 them from their original providers. `VISTA-PATH_data/` holds the script we used
-to convert each of those raw downloads into the same `images`/`masks` layout as
-the release above:
+to convert each of those raw downloads into the `images`/`masks` layout:
 
 ```
 VISTA-PATH_data/process_<dataset>.py
@@ -188,7 +187,7 @@ VISTA-PATH_data/process_<dataset>.py
 
 covering BACH, BCNB, DRCO, DROID, DROV, GlaS, HuBMAP, KMAP, KPIs, Lung_seg,
 ORCA, PANDA and prostate_gland. Each script reads the raw dataset from
-`./datasets/<dataset>/` and writes patches to `./data/<dataset>/{images,masks}/`,
+`./datasets/<dataset>/` and writes images to `./data/<dataset>/{images,masks}/`,
 so run them from a directory holding both, and adjust the paths at the top of the
 script if your download is arranged differently. The scripts are provided as a
 record of how the data was prepared rather than as a turn-key pipeline - the raw
