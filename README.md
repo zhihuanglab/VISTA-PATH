@@ -4,6 +4,8 @@
 
 🤗 **Model**: <https://huggingface.co/zhihuanglab/VISTA-PATH>
 
+📊 **Data**: <https://huggingface.co/datasets/zhihuanglab/VISTA-PATH_data>
+
 ## 🔥 Overview
 
 VISTA-PATH (Visual Interactive Segmentation and Tissue Analysis for Pathology) is an interactive foundation model for histopathology image segmentation that integrates visual context, textual class prompts, and expert-guided interaction. Pre-trained on over **1.6 million** samples, VISTA-PATH achieves strong segmentation generalization across organs and tissue types, supports efficient **human-in-the-loop** refinement, and enables **clinically interpretable analysis** through survival-associated morphological features.
@@ -17,6 +19,8 @@ Overview of VISTA-PATH model architecture
 
 
 ## 🎬 Demo Video
+
+▶️ **Watch on YouTube**: <https://www.youtube.com/watch?v=yB3e0ElkpFs>
 
 VISTA-PATH supports **human-in-the-loop** refinement by propagating sparse, patch-level bounding-box annotation feedback into whole-slide, pixel-level segmentation. VISTA-PATH is integrated into [TissueLab](https://www.tissuelab.org/). A step-by-step tutorial demonstrating how to perform VISTA-PATH active learning–based segmentation within TissueLab is available [here](https://github.com/zhihuanglab/VISTA-PATH/blob/main/notebook/run_TissueLab_VISTA-PATH.ipynb).
 
