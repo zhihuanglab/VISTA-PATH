@@ -24,6 +24,8 @@ Overview of VISTA-PATH model architecture
 
 VISTA-PATH supports **human-in-the-loop** refinement by propagating sparse, patch-level bounding-box annotation feedback into whole-slide, pixel-level segmentation. VISTA-PATH is integrated into [TissueLab](https://www.tissuelab.org/). A step-by-step tutorial demonstrating how to perform VISTA-PATH active learning–based segmentation within TissueLab is available [here](https://github.com/zhihuanglab/VISTA-PATH/blob/main/notebook/run_TissueLab_VISTA-PATH.ipynb).
 
+That tutorial runs inside the TissueLab dashboard and therefore needs a TissueLab login. The account is required only for the interactive demo - everything in this repository, including the inference below, runs offline and needs no account or credentials.
+
 <a href="https://github.com/user-attachments/assets/401248f1-c57c-4bca-87d1-cea7d366002d">
   <img src="https://raw.githubusercontent.com/zhihuanglab/VISTA-PATH/main/figures/preview.gif" alt="Demo Preview" width="800">
 </a>
@@ -114,6 +116,63 @@ python -c "import torch, openslide, transformers; print(torch.__version__, opens
 check fails, run the pip commands above inside the activated environment.
 
 PLIP, Mask2Former and SAM are pulled from the HuggingFace Hub on first run.
+
+### Troubleshooting
+
+**`CXXABI_1.3.15 not found`.** On Ubuntu 22.04 the example inference can fail at
+import time with
+
+```
+RuntimeError: Failed to import transformers.models.clip.modeling_clip because of
+the following error (look up to see its traceback):
+/lib/x86_64-linux-gnu/libstdc++.so.6: version `CXXABI_1.3.15' not found
+```
+
+Nothing is wrong with transformers - it re-raises whatever failed underneath its
+lazy import. The real cause is the `libstdc++` named in the path. Several wheels
+in this stack (scipy and opencv among them) are built against GCC 13 and need
+`CXXABI_1.3.15`, while the `libstdc++` Ubuntu 22.04 ships predates GCC 13 and
+does not export it. Check what yours has:
+
+```
+strings -a /lib/x86_64-linux-gnu/libstdc++.so.6 | grep -o 'CXXABI_1\.3\.[0-9]*' | sort -uV | tail -1
+```
+
+Note that the path in the error is the *system* library, which means the process
+did not pick up a newer one. Which fix applies depends on how the environment was
+created:
+
+- **conda** - a conda environment carries its own `$CONDA_PREFIX/lib/libstdc++.so.6`
+  and that copy wins, so updating it inside the environment is enough:
+
+  ```
+  conda install -c conda-forge "libstdcxx-ng>=13"
+  ```
+
+  Seeing `/lib/x86_64-linux-gnu/...` rather than `$CONDA_PREFIX/lib/...` in the
+  error means either the environment was not active or it has no `libstdcxx-ng`.
+
+- **uv or venv** - these use the system library, so either upgrade it
+
+  ```
+  sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+  sudo apt update && sudo apt install --only-upgrade libstdc++6
+  ```
+
+  or, without root, put a newer one ahead of it on the search path:
+
+  ```
+  export LD_LIBRARY_PATH=/path/to/conda/envs/VISTA-PATH/lib:$LD_LIBRARY_PATH
+  ```
+
+Confirm the fix with the import that was failing:
+
+```
+python -c "from transformers import CLIPModel; import scipy, cv2; print('ok')"
+```
+
+Ubuntu 24.04, RHEL 9 and other distributions shipping GCC 13 or newer are not
+affected.
 
 ## 🧠 Model Download
 
