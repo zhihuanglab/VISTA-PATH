@@ -130,6 +130,70 @@ or straight from this repository (the checkpoint is tracked with Git LFS)
 https://github.com/zhihuanglab/VISTA-PATH/tree/main/checkpoints/pytorch_model.bin
 ```
 
+## 📊 Data
+
+### Released data
+
+A subset of the VISTA-PATH training data is released on the Hugging Face Hub at
+<https://huggingface.co/datasets/zhihuanglab/VISTA-PATH_data>. It covers the
+**train split of 9 datasets**:
+
+| Dataset | Image patches | Shards |
+| --- | --- | --- |
+| AGGC | 90,978 | 69 |
+| BRCA | 7,959 | 9 |
+| CoCaHis | 302 | 2 |
+| DRYAD | 3,343 | 4 |
+| DigestPath | 4,949 | 4 |
+| Histo-Seg | 1,869 | 2 |
+| TIGER_wsibulk | 47,669 | 36 |
+| TIGER_wsirois | 1,225 | 3 |
+| WSSS4LUAD | 540 | 2 |
+
+131 shards, 237 GiB in total. The data is stored as plain ~2GB tar shards rather
+than loose files - 460k individual PNGs run into the Hub's request limits - so
+the layout is `<dataset>/{images,masks}_train_NNN.tar`, and `manifest.json` at
+the repo root lists every shard with its file count and size.
+
+```python
+from huggingface_hub import snapshot_download
+snapshot_download("zhihuanglab/VISTA-PATH_data", repo_type="dataset",
+                  local_dir="./data", allow_patterns="WSSS4LUAD/*")
+```
+
+Drop `allow_patterns` to fetch everything. Each shard carries its own
+`<dataset>/` prefix inside the archive, so extract from the directory the shards
+were downloaded into and the original tree comes back as
+`<dataset>/{images,masks}/train/*.png`:
+
+```
+cd data
+for f in WSSS4LUAD/*.tar; do tar -xf "$f"; done
+```
+
+Masks are single-channel `.png` label maps whose pixel values are class indices,
+sharing the filename of the image they belong to - the same format
+`inference_bbx.py` expects, described under [Input data format](#input-data-format).
+
+### Pre-processing code
+
+The remaining datasets used in the paper are not redistributed here - download
+them from their original providers. `VISTA-PATH_data/` holds the script we used
+to convert each of those raw downloads into the same `images`/`masks` layout as
+the release above:
+
+```
+VISTA-PATH_data/process_<dataset>.py
+```
+
+covering BACH, BCNB, DRCO, DROID, DROV, GlaS, HuBMAP, KMAP, KPIs, Lung_seg,
+ORCA, PANDA and prostate_gland. Each script reads the raw dataset from
+`./datasets/<dataset>/` and writes patches to `./data/<dataset>/{images,masks}/`,
+so run them from a directory holding both, and adjust the paths at the top of the
+script if your download is arranged differently. The scripts are provided as a
+record of how the data was prepared rather than as a turn-key pipeline - the raw
+layouts differ between providers and may change over time.
+
 ## 🔬 Quick Start: Model Inference  
 
 put the checkpoint into the file ./checkpoints
