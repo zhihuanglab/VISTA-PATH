@@ -244,7 +244,7 @@ to convert each of those raw downloads into the `images`/`masks` layout:
 VISTA-PATH_data/process_<dataset>.py
 ```
 
-covering BACH, BCNB, DRCO, DROID, DROV, GlaS, HuBMAP, KMAP, KPIs, Lung_seg,
+covering BACH, BCNB, DRCO, DROID, DROV, GlaS, HuBMAP, KPIs, KPMP, Lung_seg,
 ORCA, PANDA and prostate_gland. Each script reads the raw dataset from
 `./datasets/<dataset>/` and writes images to `./data/<dataset>/{images,masks}/`,
 so run them from a directory holding both, and adjust the paths at the top of the

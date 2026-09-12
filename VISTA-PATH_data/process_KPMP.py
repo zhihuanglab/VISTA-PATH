@@ -6,10 +6,10 @@ import shutil
 
 Image.MAX_IMAGE_PIXELS = None
 
-img_dir = './data/KMAP/images'
-output_dir = './data/KMAP/images'
+img_dir = './data/KPMP/images'
+output_dir = './data/KPMP/images'
 
-mask_dir = './data/KMAP/masks'
+mask_dir = './data/KPMP/masks'
 
 os.makedirs(output_dir, exist_ok = True)
 
