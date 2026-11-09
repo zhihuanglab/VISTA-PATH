@@ -1,4 +1,4 @@
-# Environment VISTA-PATH inference was verified on (H200, cu118 build of torch).
+# Environment VISTA-PATH inference and training were verified on (H200, cu118 build of torch).
 #
 #   conda env create -f environment.yml
 #   conda activate VISTA-PATH
@@ -48,4 +48,6 @@ dependencies:
       - pillow==12.1.1
       - scipy==1.17.1
       - tqdm==4.67.3
+      - pandas==2.3.3
+      - albumentations==2.0.8
       - regex==2026.2.28

@@ -61,7 +61,8 @@ uv pip install transformers==4.46.1 tokenizers==0.20.3 huggingface-hub==0.36.2 \
     accelerate==0.26.0 safetensors==0.7.0
 uv pip install openslide-python==1.4.6 openslide-bin==4.0.1.2 \
     opencv-python-headless==4.13.0.90 scikit-image==0.26.0 scikit-learn==1.8.0 \
-    matplotlib==3.10.8 pillow==12.1.1 scipy==1.17.1 numpy==2.4.3
+    matplotlib==3.10.8 pillow==12.1.1 scipy==1.17.1 numpy==2.4.3 \
+    pandas==2.3.3 albumentations==2.0.8
 ```
 
 The three commands are kept separate on purpose. uv resolves each package from
@@ -81,7 +82,8 @@ pip install transformers==4.46.1 tokenizers==0.20.3 huggingface-hub==0.36.2 \
     accelerate==0.26.0 safetensors==0.7.0
 pip install openslide-python==1.4.6 openslide-bin==4.0.1.2 \
     opencv-python-headless==4.13.0.90 scikit-image==0.26.0 scikit-learn==1.8.0 \
-    matplotlib==3.10.8 pillow==12.1.1 scipy==1.17.1 numpy==2.4.3
+    matplotlib==3.10.8 pillow==12.1.1 scipy==1.17.1 numpy==2.4.3 \
+    pandas==2.3.3 albumentations==2.0.8
 ```
 
 ### GPU compatibility
@@ -324,6 +326,70 @@ those indices onto the BCSS class names, where index 0 is `outside_roi` and is
 not prompted.
 
 As above, only `.jpg` is written by default — one row per prompted class (image / predicted probability / ground truth) plus a merged row. Add `--save_mask` for the `.png` label mask and `--save_prob` for the `.npz` probability maps.
+
+## 🏋️ Training
+
+`train.py` is the pre-training code for the released checkpoint. It trains on
+image/mask pairs in the layout described under [Data](#-data), listed in a CSV.
+
+### 1. Build the training CSV
+
+```
+python build_train_csv.py --data_root ./data --json_dir ./idx_to_names --output train.csv
+```
+
+`--data_root` holds one folder per dataset, each with
+`images/train/` and `masks/train/` (or `images/` and `masks/`) of identically
+named files. Each dataset also needs a class map `idx_to_names/<dataset>.json`;
+the maps for all 22 training datasets are included. The dataset of a sample
+is taken from the folder directly above `masks`, so the folder names must match
+the JSON names.
+
+The CSV has one row per (image, class) pair. A class gets a row when its index
+is non-zero, is listed in the JSON, and covers at least 30 pixels of the mask:
+
+| Column | Meaning |
+| --- | --- |
+| `train_img` | Path to the RGB image. |
+| `train_mask` | Path to its label mask (pixel values are class indices). |
+| `train_idx` | The class index this row trains on. The prompt is `an image of <class name>`. |
+
+[`examples/train_toy.csv`](examples/train_toy.csv) is a toy CSV built from the
+bundled `examples/BRCA` images:
+
+```
+train_img,train_mask,train_idx
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,1
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,2
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,3
+...
+```
+
+### 2. Train
+
+```
+bash Scripts/train.sh
+```
+
+This is the configuration of the released checkpoint: 4 GPUs, a per-device
+batch of 32 with 4 gradient-accumulation steps (effective batch 512), 10 epochs,
+AdamW with learning rate 1e-4, weight decay 0.01 and 5% linear warm-up, and fp16.
+Each sample is a random 512x512 crop with random flips and 90-degree rotations.
+The PLIP text encoder stays frozen (`--tune_mode freeze`), and half of the
+batches are trained without the box prompt (`--bbx_random 0.5`), so the model
+works with text alone or with text and a box.
+
+To check the setup quickly on one GPU with the toy CSV:
+
+```
+accelerate launch --num_processes 1 train.py \
+    --csv_file examples/train_toy.csv --output_dir ./checkpoints/toy \
+    --batch_size 2 --grad_accum_steps 1 --num_epochs 1 --num_workers 2
+```
+
+A checkpoint is written to `<output_dir>/checkpoint-<step>/` after every epoch,
+and `--resume` continues from the latest one. Its `pytorch_model.bin` can be
+passed straight to `inference.py` / `inference_bbx.py` as `--checkpoint_file`.
 
 ## 🌟 Acknowledgement
 

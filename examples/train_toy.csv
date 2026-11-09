@@ -1,0 +1,14 @@
+train_img,train_mask,train_idx
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,1
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,2
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-0.png,3
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-1024.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-1024.png,1
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-1024.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-1024.png,2
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-1024.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-1024.png,3
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-1536.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-1536.png,1
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-1536.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-1536.png,2
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-2048.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-2048.png,1
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-2048.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-2048.png,2
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-512.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-512.png,1
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-512.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-512.png,2
+examples/BRCA/images/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-512.png,examples/BRCA/masks/TCGA-A2-A3XT-DX1_xmin83566_ymin29931_MPP-0-0-512.png,3
