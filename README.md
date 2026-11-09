@@ -340,8 +340,8 @@ python build_train_csv.py --data_root ./data --json_dir ./idx_to_names --output 
 
 `--data_root` holds one folder per dataset, each with
 `images/train/` and `masks/train/` (or `images/` and `masks/`) of identically
-named files. Each dataset also needs a class map `idx_to_names/<dataset>.json`;
-the maps for all 22 training datasets are included. The dataset of a sample
+named files. Each dataset also needs a class map `idx_to_names/<dataset>.json`.
+The dataset of a sample
 is taken from the folder directly above `masks`, so the folder names must match
 the JSON names.
 
