@@ -254,6 +254,12 @@ script if your download is arranged differently. The scripts are provided as a
 record of how the data was prepared rather than as a turn-key pipeline - the raw
 layouts differ between providers and may change over time.
 
+`VISTA-PATH_data/process_Visium_lung.py` converts spatial transcriptomics
+clusters into a segmentation mask. It takes the k-means clustering of the 8 um
+bins of the 10x Genomics Visium HD Human Lung Cancer (FFPE) sample and paints
+each bin's cluster id onto a label mask aligned with the full-resolution H&E
+image (background 0, clusters 1..k).
+
 ## 🔬 Quick Start: Model Inference  
 
 put the checkpoint into the file ./checkpoints
